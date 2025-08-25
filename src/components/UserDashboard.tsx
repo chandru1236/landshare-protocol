@@ -3,7 +3,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/enhanced-button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { useAccount } from 'wagmi';
+import { useAccount, useDisconnect } from 'wagmi';
 import { useNavigate } from 'react-router-dom';
 import { useToast } from '@/hooks/use-toast';
 import { 
@@ -19,6 +19,7 @@ import {
 
 const UserDashboard = () => {
   const { address } = useAccount();
+  const { disconnect } = useDisconnect();
   const navigate = useNavigate();
   const { toast } = useToast();
   
@@ -34,6 +35,7 @@ const UserDashboard = () => {
   });
 
   const handleDisconnect = () => {
+    disconnect();
     navigate('/');
   };
 
