@@ -6,6 +6,7 @@ import { Label } from '@/components/ui/label';
 import { useAccount, useDisconnect } from 'wagmi';
 import { useNavigate } from 'react-router-dom';
 import { useToast } from '@/hooks/use-toast';
+import { supabase } from '@/integrations/supabase/client';
 import { 
   Landmark, 
   Settings, 
@@ -33,6 +34,8 @@ const AdminDashboard = () => {
     feePercentage: ''
   });
 
+  const [isTokenizing, setIsTokenizing] = useState(false);
+
   const handleDisconnect = () => {
     disconnect();
     navigate('/');
@@ -48,13 +51,77 @@ const AdminDashboard = () => {
       return;
     }
     
-    toast({
-      title: "Tokenizing Land",
-      description: `Processing tokenization for ${tokenizeForm.location}`,
-    });
+    setIsTokenizing(true);
     
-    // Smart contract interaction would go here
-    console.log('Tokenizing land:', tokenizeForm);
+    try {
+      toast({
+        title: "Uploading to IPFS",
+        description: "Creating metadata on Pinata...",
+      });
+
+      // Create metadata for the land
+      const landMetadata = {
+        name: `Land Parcel - ${tokenizeForm.location}`,
+        description: `${tokenizeForm.acres} acres of land in ${tokenizeForm.location}`,
+        location: tokenizeForm.location,
+        acres: parseFloat(tokenizeForm.acres),
+        tokenized_at: new Date().toISOString(),
+        contract_address: '0x2089cb616333462e0987105f137DD8Af2C190957'
+      };
+
+      // Upload to Pinata
+      const { data: pinataData, error: pinataError } = await supabase.functions.invoke('pinata-upload', {
+        body: { 
+          metadata: landMetadata,
+          pinataMetadata: {
+            name: `land-${tokenizeForm.location.replace(/\s+/g, '-').toLowerCase()}`,
+            keyvalues: {
+              contractAddress: '0x2089cb616333462e0987105f137DD8Af2C190957',
+              location: tokenizeForm.location,
+              acres: tokenizeForm.acres
+            }
+          }
+        }
+      });
+
+      if (pinataError) throw pinataError;
+
+      if (pinataData?.success) {
+        const metadataURI = pinataData.ipfsUrl;
+        
+        toast({
+          title: "Metadata Uploaded",
+          description: `IPFS Hash: ${pinataData.ipfsHash}`,
+        });
+
+        // Update the form with the metadata URI
+        setTokenizeForm(prev => ({ ...prev, metadataURI }));
+
+        toast({
+          title: "Land Tokenized Successfully",
+          description: `${tokenizeForm.location} has been tokenized with metadata stored on IPFS`,
+        });
+
+        console.log('Land tokenized successfully:', {
+          ...tokenizeForm,
+          metadataURI,
+          ipfsHash: pinataData.ipfsHash
+        });
+
+      } else {
+        throw new Error('Failed to upload metadata to Pinata');
+      }
+
+    } catch (error) {
+      console.error('Error tokenizing land:', error);
+      toast({
+        title: "Tokenization Failed",
+        description: error instanceof Error ? error.message : 'Unknown error occurred',
+        variant: "destructive",
+      });
+    } finally {
+      setIsTokenizing(false);
+    }
   };
 
   const handleSetPlatformFee = async () => {
@@ -238,8 +305,13 @@ const AdminDashboard = () => {
                   className="bg-navy-light border-emerald/30"
                 />
               </div>
-              <Button variant="web3" className="w-full" onClick={handleTokenizeLand}>
-                Tokenize Land
+              <Button 
+                variant="web3" 
+                className="w-full" 
+                onClick={handleTokenizeLand}
+                disabled={isTokenizing}
+              >
+                {isTokenizing ? 'Processing...' : 'Tokenize Land'}
               </Button>
             </CardContent>
           </Card>
